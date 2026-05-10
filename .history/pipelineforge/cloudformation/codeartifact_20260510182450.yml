@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: PipelineForge CodeArtifact Domain and Repository
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment name (e.g., dev, prod)
+
+Resources:
+  CodeArtifactDomain:
+    Type: AWS::CodeArtifact::Domain
+    Properties:
+      DomainName: !Sub '${EnvironmentName}-pipelineforge-domain'
+
+  CodeArtifactRepository:
+    Type: AWS::CodeArtifact::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-pipelineforge-repo'
+      DomainName: !Ref CodeArtifactDomain
+      Description: PipelineForge artifact repository
+      Upstreams: []
+      PermissionsPolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - codeartifact:GetPackageVersionReadme
+              - codeartifact:GetRepositoryEndpoint
+              - codeartifact:ReadFromRepository
+            Resource: '*'
+
+Outputs:
+  CodeArtifactDomainName:
+    Description: CodeArtifact Domain Name
+    Value: !Ref CodeArtifactDomain
+    Export:
+      Name: !Sub '${EnvironmentName}-CodeArtifactDomainName'
+  CodeArtifactRepositoryName:
+    Description: CodeArtifact Repository Name
+    Value: !Ref CodeArtifactRepository
+    Export:
+      Name: !Sub '${EnvironmentName}-CodeArtifactRepositoryName'

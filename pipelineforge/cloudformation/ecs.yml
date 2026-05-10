@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: PipelineForge ECS Cluster, Task, and Service
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment name (e.g., dev, prod)
+  VPCId:
+    Type: String
+    Description: VPC Id
+  PublicSubnet1Id:
+    Type: String
+    Description: Public Subnet 1 Id
+  PublicSubnet2Id:
+    Type: String
+    Description: Public Subnet 2 Id
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private Subnet 1 Id
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private Subnet 2 Id
+  AppECRRepositoryUri:
+    Type: String
+    Description: ECR Repository URI
+  ECSServiceRoleArn:
+    Type: String
+    Description: ECS Service Role ARN
+
+Resources:
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${EnvironmentName}-pipelineforge-cluster'
+
+  AppTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-pipelineforge-task'
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref ECSServiceRoleArn
+      ContainerDefinitions:
+        - Name: app
+          Image: !Ref AppECRRepositoryUri
+          PortMappings:
+            - ContainerPort: 5000
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/${EnvironmentName}-pipelineforge-app'
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}-pipelineforge-app'
+      RetentionInDays: 7
+
+  AppServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP to ECS Service
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ecs-sg'
+
+  AppALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${EnvironmentName}-pipelineforge-alb'
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      SecurityGroups:
+        - !Ref AppServiceSecurityGroup
+
+  AppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPCId
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+
+  AppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref AppALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AppTargetGroup
+
+  AppService:
+    Type: AWS::ECS::Service
+    DependsOn: AppListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: !Sub '${EnvironmentName}-pipelineforge-service'
+      TaskDefinition: !Ref AppTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 1
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref AppServiceSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1Id
+            - !Ref PublicSubnet2Id
+      LoadBalancers:
+        - ContainerName: app
+          ContainerPort: 5000
+          TargetGroupArn: !Ref AppTargetGroup
+
+Outputs:
+  ECSClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub '${EnvironmentName}-ECSClusterName'
+  AppALBDNSName:
+    Description: Application Load Balancer DNS Name
+    Value: !GetAtt AppALB.DNSName
+    Export:
+      Name: !Sub '${EnvironmentName}-AppALBDNSName'

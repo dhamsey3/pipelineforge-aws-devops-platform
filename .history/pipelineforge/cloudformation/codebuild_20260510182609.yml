@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: PipelineForge CodeBuild Project
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment name (e.g., dev, prod)
+  CodeBuildServiceRoleArn:
+    Type: String
+    Description: CodeBuild Service Role ARN
+  AppECRRepositoryUri:
+    Type: String
+    Description: ECR Repository URI
+  CodeArtifactDomainName:
+    Type: String
+    Description: CodeArtifact Domain Name
+  CodeArtifactRepositoryName:
+    Type: String
+    Description: CodeArtifact Repository Name
+
+Resources:
+  AppCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${EnvironmentName}-pipelineforge-build'
+      ServiceRole: !Ref CodeBuildServiceRoleArn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: CODEARTIFACT_DOMAIN
+            Value: !Ref CodeArtifactDomainName
+          - Name: CODEARTIFACT_REPO
+            Value: !Ref CodeArtifactRepositoryName
+          - Name: ECR_REPO
+            Value: !Ref AppECRRepositoryUri
+      Source:
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 30
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+
+Outputs:
+  AppCodeBuildProjectName:
+    Description: CodeBuild Project Name
+    Value: !Ref AppCodeBuildProject
+    Export:
+      Name: !Sub '${EnvironmentName}-AppCodeBuildProjectName'

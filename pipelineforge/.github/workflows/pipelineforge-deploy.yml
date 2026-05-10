@@ -1,0 +1,29 @@
+name: PipelineForge Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Validate CloudFormation template
+        run: |
+          aws cloudformation validate-template --template-body file://pipelineforge/cloudformation/main.yml
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file pipelineforge/cloudformation/main.yml \
+            --stack-name pipelineforge-main-stack \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides EnvironmentName=dev
