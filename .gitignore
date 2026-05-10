@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+
+# Docker
+*.env
+*.local
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Node
+node_modules/
+
+# History
+.history/
+
+# AWS
+*.aws-sam/
+
+# Other
+*.log
+*.swp
