@@ -23,15 +23,29 @@ Parameters:
   AppECRRepositoryUri:
     Type: String
     Description: ECR Repository URI
-  ECSServiceRoleArn:
+  AppTableName:
     Type: String
-    Description: ECS Service Role ARN
+    Description: DynamoDB deployments table name
+  DesiredCount:
+    Type: Number
+    Description: Number of ECS tasks to run
+    Default: 1
+    MinValue: 0
+  ECSTaskExecutionRoleArn:
+    Type: String
+    Description: ECS task execution role ARN
+  ECSTaskAppRoleArn:
+    Type: String
+    Description: ECS application task role ARN
 
 Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: !Sub '${EnvironmentName}-pipelineforge-cluster'
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
 
   AppTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -42,12 +56,25 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !Ref ECSServiceRoleArn
+      ExecutionRoleArn: !Ref ECSTaskExecutionRoleArn
+      TaskRoleArn: !Ref ECSTaskAppRoleArn
       ContainerDefinitions:
         - Name: app
           Image: !Ref AppECRRepositoryUri
+          Essential: true
           PortMappings:
             - ContainerPort: 5000
+          Environment:
+            - Name: APP_TABLE_NAME
+              Value: !Ref AppTableName
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 30
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -59,12 +86,12 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub '/ecs/${EnvironmentName}-pipelineforge-app'
-      RetentionInDays: 7
+      RetentionInDays: 30
 
-  AppServiceSecurityGroup:
+  AppALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP to ECS Service
+      GroupDescription: Allow public HTTP to the application load balancer
       VpcId: !Ref VPCId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -73,7 +100,21 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-ecs-sg'
+          Value: !Sub '${EnvironmentName}-alb-sg'
+
+  AppServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB to ECS tasks
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !Ref AppALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ecs-service-sg'
 
   AppALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -84,16 +125,20 @@ Resources:
         - !Ref PublicSubnet1Id
         - !Ref PublicSubnet2Id
       SecurityGroups:
-        - !Ref AppServiceSecurityGroup
+        - !Ref AppALBSecurityGroup
 
   AppTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       VpcId: !Ref VPCId
       Protocol: HTTP
-      Port: 80
+      Port: 5000
       TargetType: ip
-      HealthCheckPath: /
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
       Matcher:
         HttpCode: 200
 
@@ -115,7 +160,7 @@ Resources:
       ServiceName: !Sub '${EnvironmentName}-pipelineforge-service'
       TaskDefinition: !Ref AppTaskDefinition
       LaunchType: FARGATE
-      DesiredCount: 1
+      DesiredCount: !Ref DesiredCount
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
@@ -128,6 +173,9 @@ Resources:
         - ContainerName: app
           ContainerPort: 5000
           TargetGroupArn: !Ref AppTargetGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
 
 Outputs:
   ECSClusterName:
@@ -135,6 +183,11 @@ Outputs:
     Value: !Ref ECSCluster
     Export:
       Name: !Sub '${EnvironmentName}-ECSClusterName'
+  AppServiceName:
+    Description: ECS service name
+    Value: !GetAtt AppService.Name
+    Export:
+      Name: !Sub '${EnvironmentName}-AppServiceName'
   AppALBDNSName:
     Description: Application Load Balancer DNS Name
     Value: !GetAtt AppALB.DNSName

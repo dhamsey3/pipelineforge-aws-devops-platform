@@ -11,6 +11,9 @@ Resources:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: !Sub '${EnvironmentName}-pipelineforge-app'
+      ImageTagMutability: MUTABLE
+      EncryptionConfiguration:
+        EncryptionType: AES256
       ImageScanningConfiguration:
         scanOnPush: true
       LifecyclePolicy:

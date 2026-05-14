@@ -5,6 +5,9 @@ Parameters:
   EnvironmentName:
     Type: String
     Description: Environment name (e.g., dev, prod)
+  AppTableArn:
+    Type: String
+    Description: DynamoDB deployments table ARN
 
 Resources:
   CodePipelineServiceRole:
@@ -35,21 +38,65 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess
+      Policies:
+        - PolicyName: BuildAndPushContainer
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EnvironmentName}-pipelineforge-app'
       Path: /
 
-  ECSServiceRole:
+  ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${EnvironmentName}-ECSServiceRole'
+      RoleName: !Sub '${EnvironmentName}-ECSTaskExecutionRole'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: ecs.amazonaws.com
+              Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Path: /
+
+  ECSTaskAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-ECSTaskAppRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DeploymentTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !Ref AppTableArn
+                  - !Sub '${AppTableArn}/index/*'
       Path: /
 
 Outputs:
@@ -63,8 +110,13 @@ Outputs:
     Value: !GetAtt CodeBuildServiceRole.Arn
     Export:
       Name: !Sub '${EnvironmentName}-CodeBuildServiceRoleArn'
-  ECSServiceRoleArn:
-    Description: ECS Service Role ARN
-    Value: !GetAtt ECSServiceRole.Arn
+  ECSTaskExecutionRoleArn:
+    Description: ECS task execution role ARN
+    Value: !GetAtt ECSTaskExecutionRole.Arn
     Export:
-      Name: !Sub '${EnvironmentName}-ECSServiceRoleArn'
+      Name: !Sub '${EnvironmentName}-ECSTaskExecutionRoleArn'
+  ECSTaskAppRoleArn:
+    Description: ECS application task role ARN
+    Value: !GetAtt ECSTaskAppRole.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-ECSTaskAppRoleArn'

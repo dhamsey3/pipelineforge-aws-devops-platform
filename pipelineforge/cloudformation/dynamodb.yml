@@ -5,26 +5,58 @@ Parameters:
   EnvironmentName:
     Type: String
     Description: Environment name (e.g., dev, prod)
+  EnableDeletionProtection:
+    Type: String
+    Description: Enable deletion protection for the deployment table
+    Default: true
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+Conditions:
+  DeletionProtectionEnabled: !Equals [!Ref EnableDeletionProtection, 'true']
 
 Resources:
   AppTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      TableName: !Sub '${EnvironmentName}-pipelineforge-app-table'
+      TableName: !Sub '${EnvironmentName}-pipelineforge-deployments'
       AttributeDefinitions:
         - AttributeName: id
+          AttributeType: S
+        - AttributeName: service
+          AttributeType: S
+        - AttributeName: environment
           AttributeType: S
       KeySchema:
         - AttributeName: id
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      DeletionProtectionEnabled: !If [DeletionProtectionEnabled, true, false]
       SSESpecification:
         SSEEnabled: true
       StreamSpecification:
         StreamViewType: NEW_AND_OLD_IMAGES
+      GlobalSecondaryIndexes:
+        - IndexName: service-index
+          KeySchema:
+            - AttributeName: service
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: environment-index
+          KeySchema:
+            - AttributeName: environment
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-pipelineforge-app-table'
+          Value: !Sub '${EnvironmentName}-pipelineforge-deployments'
 
 Outputs:
   AppTableName:
@@ -32,3 +64,8 @@ Outputs:
     Value: !Ref AppTable
     Export:
       Name: !Sub '${EnvironmentName}-AppTableName'
+  AppTableArn:
+    Description: DynamoDB Table ARN
+    Value: !GetAtt AppTable.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-AppTableArn'
