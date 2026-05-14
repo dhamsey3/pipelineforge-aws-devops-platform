@@ -14,14 +14,64 @@ Parameters:
   AppECRRepositoryUri:
     Type: String
     Description: ECR Repository URI
-  ECSClusterName:
+  VPCId:
     Type: String
-    Description: ECS Cluster Name
-  AppALBDNSName:
+    Description: VPC Id
+  PublicSubnet1Id:
     Type: String
-    Description: Application Load Balancer DNS Name
+    Description: Public Subnet 1 Id
+  PublicSubnet2Id:
+    Type: String
+    Description: Public Subnet 2 Id
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private Subnet 1 Id
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private Subnet 2 Id
+  AppTableName:
+    Type: String
+    Description: DynamoDB deployments table name
+  ECSTaskExecutionRoleArn:
+    Type: String
+    Description: ECS task execution role ARN
+  ECSTaskAppRoleArn:
+    Type: String
+    Description: ECS application task role ARN
+  GitHubOwner:
+    Type: String
+    Description: GitHub organization or user that owns the source repository
+  GitHubRepo:
+    Type: String
+    Description: GitHub source repository name
+  GitHubBranch:
+    Type: String
+    Description: GitHub branch to deploy
+    Default: main
+  GitHubOAuthToken:
+    Type: String
+    Description: GitHub OAuth token for CodePipeline source access
+    NoEcho: true
 
 Resources:
+  PipelineArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-pipelineforge-artifacts-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
   AppPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
@@ -29,7 +79,7 @@ Resources:
       RoleArn: !Ref CodePipelineServiceRoleArn
       ArtifactStore:
         Type: S3
-        Location: !Sub '${EnvironmentName}-pipelineforge-artifacts'
+        Location: !Ref PipelineArtifactBucket
       Stages:
         - Name: Source
           Actions:
@@ -42,10 +92,10 @@ Resources:
               OutputArtifacts:
                 - Name: SourceOutput
               Configuration:
-                Owner: <GITHUB_OWNER>
-                Repo: <GITHUB_REPO>
-                Branch: main
-                OAuthToken: <GITHUB_TOKEN>
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubOAuthToken
               RunOrder: 1
         - Name: Build
           Actions:
@@ -77,6 +127,20 @@ Resources:
                 StackName: !Sub '${EnvironmentName}-pipelineforge-app-stack'
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutput::cloudformation/ecs.yml
+                ParameterOverrides: !Sub |
+                  {
+                    "EnvironmentName": "${EnvironmentName}",
+                    "VPCId": "${VPCId}",
+                    "PublicSubnet1Id": "${PublicSubnet1Id}",
+                    "PublicSubnet2Id": "${PublicSubnet2Id}",
+                    "PrivateSubnet1Id": "${PrivateSubnet1Id}",
+                    "PrivateSubnet2Id": "${PrivateSubnet2Id}",
+                    "AppECRRepositoryUri": "${AppECRRepositoryUri}:latest",
+                    "AppTableName": "${AppTableName}",
+                    "DesiredCount": "1",
+                    "ECSTaskExecutionRoleArn": "${ECSTaskExecutionRoleArn}",
+                    "ECSTaskAppRoleArn": "${ECSTaskAppRoleArn}"
+                  }
               RunOrder: 1
       RestartExecutionOnUpdate: true
 

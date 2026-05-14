@@ -1,25 +1,21 @@
-# Production-ready Dockerfile for PipelineForge app
-FROM public.ecr.aws/lambda/python:3.11 as base
+FROM python:3.11-slim
 
-# Install system dependencies
-RUN yum install -y gcc
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=5000
 
-# Set workdir
-WORKDIR /var/task
+WORKDIR /app
 
-# Copy requirements and install
+RUN addgroup --system app && adduser --system --ingroup app app
+
 COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy app code
 COPY app.py ./
 
-# Set environment variables
-ENV PORT=5000
+USER app
 
-# Use Lambda Runtime Interface Emulator for local testing
-CMD ["app.handler"]
+EXPOSE 5000
 
-# For ECS, override CMD to run Flask
-ENTRYPOINT ["python"]
-CMD ["app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "30", "app:app"]

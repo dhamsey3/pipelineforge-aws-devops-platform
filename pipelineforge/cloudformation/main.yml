@@ -1,64 +1,110 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  PipelineForge Main Stack - Orchestrates all nested stacks for the CI/CD platform.
+  PipelineForge Main Stack - Orchestrates shared platform stacks for the deployment tracker.
 
 Parameters:
   EnvironmentName:
     Type: String
     Description: Environment name (e.g., dev, prod)
     Default: dev
+  GitHubOwner:
+    Type: String
+    Description: GitHub organization or user that owns the source repository
+  GitHubRepo:
+    Type: String
+    Description: GitHub source repository name
+  GitHubBranch:
+    Type: String
+    Description: GitHub branch to deploy
+    Default: main
+  GitHubOAuthToken:
+    Type: String
+    Description: GitHub OAuth token for CodePipeline source access
+    NoEcho: true
 
 Resources:
-  NetworkStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./network.yml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-  IAMStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./iam.yml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-  ECRStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./ecr.yml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-  ECSStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./ecs.yml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-  CodeArtifactStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./codeartifact.yml
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
   DynamoDBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: ./dynamodb.yml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
+
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./network.yml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./iam.yml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        AppTableArn: !GetAtt DynamoDBStack.Outputs.AppTableArn
+
+  ECRStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./ecr.yml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
+  CodeArtifactStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./codeartifact.yml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+
   CodeBuildStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IAMStack
+      - ECRStack
+      - CodeArtifactStack
     Properties:
       TemplateURL: ./codebuild.yml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
+        CodeBuildServiceRoleArn: !GetAtt IAMStack.Outputs.CodeBuildServiceRoleArn
+        AppECRRepositoryUri: !GetAtt ECRStack.Outputs.AppECRRepositoryUri
+        CodeArtifactDomainName: !GetAtt CodeArtifactStack.Outputs.CodeArtifactDomainName
+        CodeArtifactRepositoryName: !GetAtt CodeArtifactStack.Outputs.CodeArtifactRepositoryName
+
   CodePipelineStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IAMStack
+      - CodeBuildStack
+      - NetworkStack
+      - DynamoDBStack
     Properties:
       TemplateURL: ./codepipeline.yml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
+        CodePipelineServiceRoleArn: !GetAtt IAMStack.Outputs.CodePipelineServiceRoleArn
+        AppCodeBuildProjectName: !GetAtt CodeBuildStack.Outputs.AppCodeBuildProjectName
+        AppECRRepositoryUri: !GetAtt ECRStack.Outputs.AppECRRepositoryUri
+        VPCId: !GetAtt NetworkStack.Outputs.VPCId
+        PublicSubnet1Id: !GetAtt NetworkStack.Outputs.PublicSubnet1Id
+        PublicSubnet2Id: !GetAtt NetworkStack.Outputs.PublicSubnet2Id
+        PrivateSubnet1Id: !GetAtt NetworkStack.Outputs.PrivateSubnet1Id
+        PrivateSubnet2Id: !GetAtt NetworkStack.Outputs.PrivateSubnet2Id
+        AppTableName: !GetAtt DynamoDBStack.Outputs.AppTableName
+        ECSTaskExecutionRoleArn: !GetAtt IAMStack.Outputs.ECSTaskExecutionRoleArn
+        ECSTaskAppRoleArn: !GetAtt IAMStack.Outputs.ECSTaskAppRoleArn
+        GitHubOwner: !Ref GitHubOwner
+        GitHubRepo: !Ref GitHubRepo
+        GitHubBranch: !Ref GitHubBranch
+        GitHubOAuthToken: !Ref GitHubOAuthToken
+
   MonitoringStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - CodePipelineStack
     Properties:
       TemplateURL: ./monitoring.yml
       Parameters:
