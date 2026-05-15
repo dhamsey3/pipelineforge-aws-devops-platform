@@ -21,6 +21,10 @@ Parameters:
     Type: String
     Description: GitHub OAuth token for CodePipeline source access
     NoEcho: true
+  CertificateArn:
+    Type: String
+    Description: Optional ACM certificate ARN for HTTPS on the public load balancer
+    Default: ''
 
 Resources:
   DynamoDBStack:
@@ -61,10 +65,6 @@ Resources:
 
   CodeBuildStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn:
-      - IAMStack
-      - ECRStack
-      - CodeArtifactStack
     Properties:
       TemplateURL: ./codebuild.yml
       Parameters:
@@ -76,16 +76,12 @@ Resources:
 
   CodePipelineStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn:
-      - IAMStack
-      - CodeBuildStack
-      - NetworkStack
-      - DynamoDBStack
     Properties:
       TemplateURL: ./codepipeline.yml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         CodePipelineServiceRoleArn: !GetAtt IAMStack.Outputs.CodePipelineServiceRoleArn
+        CloudFormationExecutionRoleArn: !GetAtt IAMStack.Outputs.CloudFormationExecutionRoleArn
         AppCodeBuildProjectName: !GetAtt CodeBuildStack.Outputs.AppCodeBuildProjectName
         AppECRRepositoryUri: !GetAtt ECRStack.Outputs.AppECRRepositoryUri
         VPCId: !GetAtt NetworkStack.Outputs.VPCId
@@ -100,6 +96,7 @@ Resources:
         GitHubRepo: !Ref GitHubRepo
         GitHubBranch: !Ref GitHubBranch
         GitHubOAuthToken: !Ref GitHubOAuthToken
+        CertificateArn: !Ref CertificateArn
 
   MonitoringStack:
     Type: AWS::CloudFormation::Stack

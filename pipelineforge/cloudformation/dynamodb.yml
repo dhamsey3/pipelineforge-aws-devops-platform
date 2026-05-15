@@ -8,7 +8,7 @@ Parameters:
   EnableDeletionProtection:
     Type: String
     Description: Enable deletion protection for the deployment table
-    Default: true
+    Default: 'true'
     AllowedValues:
       - 'true'
       - 'false'
