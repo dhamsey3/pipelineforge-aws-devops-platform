@@ -19,16 +19,6 @@ Resources:
       DomainName: !Ref CodeArtifactDomain
       Description: PipelineForge artifact repository
       Upstreams: []
-      PermissionsPolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: '*'
-            Action:
-              - codeartifact:GetPackageVersionReadme
-              - codeartifact:GetRepositoryEndpoint
-              - codeartifact:ReadFromRepository
-            Resource: '*'
 
 Outputs:
   CodeArtifactDomainName:

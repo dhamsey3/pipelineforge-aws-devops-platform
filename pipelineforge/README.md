@@ -8,8 +8,9 @@ PipelineForge is a hardened AWS DevOps reference project that solves a specific 
 - GitHub-triggered CI/CD pipeline
 - Containerized Deployment Tracker API on ECS Fargate
 - DynamoDB-backed deployment history
-- Application Load Balancer health checks
+- Application Load Balancer health checks with optional HTTPS
 - Separate ALB and ECS task security groups
+- Private-subnet ECS tasks with NAT egress
 - ECS task execution and application roles
 - Encrypted and retained pipeline artifacts
 - DynamoDB point-in-time recovery and deletion protection
@@ -60,10 +61,10 @@ flowchart LR
       IGW[Internet Gateway]
       subgraph PublicSubnets[Public Subnets across 2 AZs]
         ALB[Application Load Balancer]
-        ECS[ECS Fargate Service]
+        NAT[NAT Gateways]
       end
       subgraph PrivateSubnets[Private Subnets across 2 AZs]
-        PrivateCapacity[Reserved private capacity]
+        ECS[ECS Fargate Service]
       end
     end
 
@@ -94,7 +95,7 @@ flowchart LR
   AppStack --> AppLayer
   MainStack --> Observability
 
-  Internet((Internet)) -->|HTTP :80| IGW
+  Internet((Internet)) -->|HTTP :80 / HTTPS :443| IGW
   IGW --> ALB
   ALB -->|forwards to target group| ECS
   ECS --> Task
@@ -111,7 +112,7 @@ flowchart LR
 2. CodePipeline pulls the source, stores pipeline artifacts in S3, and starts CodeBuild.
 3. CodeBuild installs dependencies, builds the Docker image from `app/Dockerfile`, tags it with the commit SHA, and pushes it to Amazon ECR.
 4. The deployment updates the ECS CloudFormation stack so the Fargate service runs the new container image.
-5. The internet-facing Application Load Balancer receives HTTP traffic on port 80 and forwards it to the Deployment Tracker API on port 5000.
+5. The internet-facing Application Load Balancer receives HTTP traffic on port 80, redirects to HTTPS when an ACM certificate is configured, and forwards to the Deployment Tracker API on port 5000.
 6. CloudWatch Logs captures ECS task logs, CloudWatch Alarms monitor pipeline and service health, and SNS sends deployment or failure notifications.
 7. The API writes deployment records to DynamoDB and supports listing or filtering recent deployment history.
 
@@ -119,7 +120,9 @@ flowchart LR
 
 - The ECS task has a dedicated application role with scoped DynamoDB access.
 - The task execution role uses the `ecs-tasks.amazonaws.com` trust relationship.
-- The ALB accepts public HTTP traffic, while ECS tasks only accept traffic from the ALB security group on port 5000.
+- The ALB accepts public web traffic, while ECS tasks run in private subnets and only accept traffic from the ALB security group on port 5000.
+- ECS deployments use a circuit breaker with rollback and run at least one healthy task during updates.
+- CodePipeline and CodeBuild use scoped inline policies instead of broad service-access managed policies.
 - DynamoDB uses server-side encryption, point-in-time recovery, streams, and deletion protection.
 - The ECR repository scans images on push and expires stale untagged images.
 - The pipeline artifact bucket blocks public access, enables encryption, enables versioning, and is retained on stack deletion.
@@ -128,8 +131,8 @@ flowchart LR
 ### Infrastructure Stacks
 
 - `main.yml` - Orchestrates the shared platform nested stacks.
-- `network.yml` - Creates the VPC, public subnets, private subnets, public route table, and internet gateway.
-- `iam.yml` - Defines service roles for CodePipeline, CodeBuild, ECS task execution, and application DynamoDB access.
+- `network.yml` - Creates the VPC, public subnets, private subnets, route tables, internet gateway, and NAT gateways.
+- `iam.yml` - Defines service roles for CodePipeline, CodeBuild, CloudFormation deployment, ECS task execution, and application DynamoDB access.
 - `ecr.yml` - Creates the application container image repository.
 - `ecs.yml` - Creates the ECS app stack with cluster, Fargate task definition, service, ALB, target group, listener, security groups, and log group.
 - `codeartifact.yml` - Creates the package artifact domain and repository.

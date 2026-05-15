@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import os
+import re
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
@@ -17,8 +18,19 @@ except ImportError:
 APP_NAME = "pipelineforge-deployment-tracker"
 VALID_STATUSES = {"queued", "in_progress", "succeeded", "failed", "rolled_back"}
 REQUIRED_DEPLOYMENT_FIELDS = {"service", "environment", "version", "status"}
+TEXT_FIELD_LIMITS = {
+    "service": 80,
+    "environment": 40,
+    "version": 120,
+    "status": 20,
+    "commit_sha": 64,
+    "deployed_by": 120,
+    "notes": 2000,
+}
+NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@-]*$")
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 16 * 1024))
 
 
 class DeploymentStore:
@@ -109,6 +121,7 @@ store = build_store()
 
 @app.after_request
 def add_security_headers(response):
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -124,6 +137,11 @@ def not_found(error):
 @app.errorhandler(500)
 def server_error(error):
     return jsonify({"error": "internal_error", "message": "Unexpected server error"}), 500
+
+
+@app.errorhandler(413)
+def payload_too_large(error):
+    return jsonify({"error": "payload_too_large", "message": "Request body is too large"}), 413
 
 
 @app.route("/")
@@ -148,7 +166,7 @@ def list_deployments():
         deployments = store.list(environment=environment, service=service, limit=limit)
     except STORAGE_EXCEPTIONS as exc:
         app.logger.exception("Failed to list deployments")
-        return jsonify({"error": "storage_error", "message": str(exc)}), 503
+        return storage_error_response()
 
     return jsonify({"deployments": deployments})
 
@@ -159,7 +177,7 @@ def get_deployment(deployment_id):
         deployment = store.get(deployment_id)
     except STORAGE_EXCEPTIONS as exc:
         app.logger.exception("Failed to get deployment")
-        return jsonify({"error": "storage_error", "message": str(exc)}), 503
+        return storage_error_response()
 
     if not deployment:
         return jsonify({"error": "not_found", "message": "Deployment not found"}), 404
@@ -191,7 +209,7 @@ def create_deployment():
         store.create(deployment)
     except STORAGE_EXCEPTIONS as exc:
         app.logger.exception("Failed to create deployment")
-        return jsonify({"error": "storage_error", "message": str(exc)}), 503
+        return storage_error_response()
 
     return jsonify({"deployment": deployment}), 201
 
@@ -207,23 +225,47 @@ def parse_limit(raw_limit):
 
 def validate_deployment(payload):
     errors = {}
+    if not isinstance(payload, dict):
+        return {"payload": "must be a JSON object"}
+
     missing_fields = REQUIRED_DEPLOYMENT_FIELDS - payload.keys()
     for field in sorted(missing_fields):
         errors[field] = "required"
 
-    for field in REQUIRED_DEPLOYMENT_FIELDS & payload.keys():
-        if not isinstance(payload[field], str) or not payload[field].strip():
+    for field, value in payload.items():
+        if field not in TEXT_FIELD_LIMITS:
+            errors[field] = "is not allowed"
+            continue
+        if not isinstance(value, str):
+            errors[field] = "must be a string"
+            continue
+
+        value = value.strip()
+        if field in REQUIRED_DEPLOYMENT_FIELDS and not value:
             errors[field] = "must be a non-empty string"
+            continue
+        if len(value) > TEXT_FIELD_LIMITS[field]:
+            errors[field] = f"must be {TEXT_FIELD_LIMITS[field]} characters or fewer"
 
     status = payload.get("status")
     if isinstance(status, str) and status.strip() not in VALID_STATUSES:
         errors["status"] = f"must be one of: {', '.join(sorted(VALID_STATUSES))}"
 
-    for field in {"commit_sha", "deployed_by", "notes"} & payload.keys():
-        if not isinstance(payload[field], str):
-            errors[field] = "must be a string"
+    for field in {"service", "environment", "version"} & payload.keys():
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip() and not NAME_PATTERN.match(value.strip()):
+            errors[field] = "contains unsupported characters"
 
     return errors
+
+
+def storage_error_response():
+    return jsonify(
+        {
+            "error": "storage_error",
+            "message": "Storage backend is temporarily unavailable",
+        }
+    ), 503
 
 
 if __name__ == "__main__":

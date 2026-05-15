@@ -15,7 +15,7 @@ Resources:
       EncryptionConfiguration:
         EncryptionType: AES256
       ImageScanningConfiguration:
-        scanOnPush: true
+        ScanOnPush: true
       LifecyclePolicy:
         LifecyclePolicyText: |
           {

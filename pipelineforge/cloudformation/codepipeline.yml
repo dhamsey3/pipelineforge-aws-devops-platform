@@ -8,6 +8,9 @@ Parameters:
   CodePipelineServiceRoleArn:
     Type: String
     Description: CodePipeline Service Role ARN
+  CloudFormationExecutionRoleArn:
+    Type: String
+    Description: CloudFormation execution role ARN for app stack deployments
   AppCodeBuildProjectName:
     Type: String
     Description: CodeBuild Project Name
@@ -52,6 +55,10 @@ Parameters:
     Type: String
     Description: GitHub OAuth token for CodePipeline source access
     NoEcho: true
+  CertificateArn:
+    Type: String
+    Description: Optional ACM certificate ARN for HTTPS on the public load balancer
+    Default: ''
 
 Resources:
   PipelineArtifactBucket:
@@ -126,6 +133,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 StackName: !Sub '${EnvironmentName}-pipelineforge-app-stack'
                 Capabilities: CAPABILITY_NAMED_IAM
+                RoleArn: !Ref CloudFormationExecutionRoleArn
                 TemplatePath: BuildOutput::cloudformation/ecs.yml
                 ParameterOverrides: !Sub |
                   {
@@ -137,9 +145,10 @@ Resources:
                     "PrivateSubnet2Id": "${PrivateSubnet2Id}",
                     "AppECRRepositoryUri": "${AppECRRepositoryUri}:latest",
                     "AppTableName": "${AppTableName}",
-                    "DesiredCount": "1",
+                    "DesiredCount": "2",
                     "ECSTaskExecutionRoleArn": "${ECSTaskExecutionRoleArn}",
-                    "ECSTaskAppRoleArn": "${ECSTaskAppRoleArn}"
+                    "ECSTaskAppRoleArn": "${ECSTaskAppRoleArn}",
+                    "CertificateArn": "${CertificateArn}"
                   }
               RunOrder: 1
       RestartExecutionOnUpdate: true
