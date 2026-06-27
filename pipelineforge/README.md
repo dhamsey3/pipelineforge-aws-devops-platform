@@ -149,4 +149,16 @@ flowchart LR
 - `.github/` - GitHub workflows/config
 
 ## Deployment
-See `docs/deployment.md` for instructions.
+Quick start:
+
+```bash
+cd pipelineforge
+export AWS_PROFILE=pipelineforge-dev
+export AWS_REGION=us-east-1
+export AWS_STS_REGIONAL_ENDPOINTS=regional
+bash scripts/aws-connect.sh dev
+set -a && source .aws-connection.env && set +a
+bash scripts/deploy.sh dev <github-owner> <github-repo> main
+```
+
+See `docs/deployment.md` for full instructions.

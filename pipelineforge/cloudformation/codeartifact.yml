@@ -14,20 +14,20 @@ Resources:
 
   CodeArtifactRepository:
     Type: AWS::CodeArtifact::Repository
+    DependsOn: CodeArtifactDomain
     Properties:
       RepositoryName: !Sub '${EnvironmentName}-pipelineforge-repo'
-      DomainName: !Ref CodeArtifactDomain
+      DomainName: !Sub '${EnvironmentName}-pipelineforge-domain'
       Description: PipelineForge artifact repository
-      Upstreams: []
 
 Outputs:
   CodeArtifactDomainName:
     Description: CodeArtifact Domain Name
-    Value: !Ref CodeArtifactDomain
+    Value: !Sub '${EnvironmentName}-pipelineforge-domain'
     Export:
       Name: !Sub '${EnvironmentName}-CodeArtifactDomainName'
   CodeArtifactRepositoryName:
     Description: CodeArtifact Repository Name
-    Value: !Ref CodeArtifactRepository
+    Value: !Sub '${EnvironmentName}-pipelineforge-repo'
     Export:
       Name: !Sub '${EnvironmentName}-CodeArtifactRepositoryName'

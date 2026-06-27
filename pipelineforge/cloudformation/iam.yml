@@ -8,6 +8,9 @@ Parameters:
   AppTableArn:
     Type: String
     Description: DynamoDB deployments table ARN
+  GitHubConnectionArn:
+    Type: String
+    Description: GitHub CodeStar connection ARN used by CodePipeline source
 
 Resources:
   CodePipelineServiceRole:
@@ -52,6 +55,11 @@ Resources:
                   - cloudformation:SetStackPolicy
                   - cloudformation:ValidateTemplate
                 Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${EnvironmentName}-pipelineforge-app-stack/*'
+              - Effect: Allow
+                Action:
+                  - codeconnections:UseConnection
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnectionArn
               - Effect: Allow
                 Action: iam:PassRole
                 Resource: !GetAtt CloudFormationExecutionRole.Arn

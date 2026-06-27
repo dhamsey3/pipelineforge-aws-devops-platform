@@ -17,16 +17,18 @@ Parameters:
     Type: String
     Description: GitHub branch to deploy
     Default: main
-  GitHubOAuthToken:
-    Type: String
-    Description: GitHub OAuth token for CodePipeline source access
-    NoEcho: true
   CertificateArn:
     Type: String
     Description: Optional ACM certificate ARN for HTTPS on the public load balancer
     Default: ''
 
 Resources:
+  GitHubConnection:
+    Type: AWS::CodeStarConnections::Connection
+    Properties:
+      ConnectionName: !Sub '${EnvironmentName}-pipelineforge-github'
+      ProviderType: GitHub
+
   DynamoDBStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -48,6 +50,7 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         AppTableArn: !GetAtt DynamoDBStack.Outputs.AppTableArn
+        GitHubConnectionArn: !Ref GitHubConnection
 
   ECRStack:
     Type: AWS::CloudFormation::Stack
@@ -95,7 +98,7 @@ Resources:
         GitHubOwner: !Ref GitHubOwner
         GitHubRepo: !Ref GitHubRepo
         GitHubBranch: !Ref GitHubBranch
-        GitHubOAuthToken: !Ref GitHubOAuthToken
+        GitHubConnectionArn: !Ref GitHubConnection
         CertificateArn: !Ref CertificateArn
 
   MonitoringStack:
@@ -111,3 +114,6 @@ Outputs:
   EnvironmentName:
     Description: Name of the environment
     Value: !Ref EnvironmentName
+  GitHubConnectionArn:
+    Description: ARN of the GitHub CodeStar connection used by CodePipeline
+    Value: !Ref GitHubConnection

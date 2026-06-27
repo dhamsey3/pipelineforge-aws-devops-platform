@@ -51,10 +51,9 @@ Parameters:
     Type: String
     Description: GitHub branch to deploy
     Default: main
-  GitHubOAuthToken:
+  GitHubConnectionArn:
     Type: String
-    Description: GitHub OAuth token for CodePipeline source access
-    NoEcho: true
+    Description: GitHub CodeStar connection ARN used by CodePipeline source
   CertificateArn:
     Type: String
     Description: Optional ACM certificate ARN for HTTPS on the public load balancer
@@ -93,16 +92,16 @@ Resources:
             - Name: Source
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Owner: AWS
+                Provider: CodeStarSourceConnection
                 Version: 1
               OutputArtifacts:
                 - Name: SourceOutput
               Configuration:
-                Owner: !Ref GitHubOwner
-                Repo: !Ref GitHubRepo
-                Branch: !Ref GitHubBranch
-                OAuthToken: !Ref GitHubOAuthToken
+                ConnectionArn: !Ref GitHubConnectionArn
+                FullRepositoryId: !Sub '${GitHubOwner}/${GitHubRepo}'
+                BranchName: !Ref GitHubBranch
+                OutputArtifactFormat: CODE_ZIP
               RunOrder: 1
         - Name: Build
           Actions:
