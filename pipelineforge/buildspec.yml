@@ -6,7 +6,7 @@ phases:
     commands:
       - echo Installing Python dependencies
       - python -m pip install --upgrade pip
-      - pip install -r app/requirements.txt
+      - pip install -r pipelineforge/app/requirements.txt
   pre_build:
     commands:
       - echo Logging in to Amazon ECR
@@ -17,8 +17,8 @@ phases:
   build:
     commands:
       - echo Build started on `date`
-      - python -m compileall app
-      - docker build -t $ECR_REPO:$IMAGE_TAG ./app
+      - python -m compileall pipelineforge/app
+      - docker build -t $ECR_REPO:$IMAGE_TAG ./pipelineforge/app
       - docker tag $ECR_REPO:$IMAGE_TAG $ECR_REPO:latest
   post_build:
     commands:
@@ -29,3 +29,4 @@ phases:
 artifacts:
   files:
     - cloudformation/**/*
+  base-directory: pipelineforge
