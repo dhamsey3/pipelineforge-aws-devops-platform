@@ -147,6 +147,14 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PassedToService: ecs-tasks.amazonaws.com
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/*'
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName:
+                      - elasticloadbalancing.amazonaws.com
+                      - ecs.amazonaws.com
       Path: /
 
   CodeBuildServiceRole:
