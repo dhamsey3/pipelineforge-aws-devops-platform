@@ -13,7 +13,7 @@ phases:
       - aws --version
       - ECR_REGISTRY=$(echo $ECR_REPO | cut -d/ -f1)
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+      - IMAGE_TAG=$(printf '%s' "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)
   build:
     commands:
       - echo Build started on `date`
