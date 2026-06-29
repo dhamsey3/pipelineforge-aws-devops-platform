@@ -164,7 +164,7 @@ def list_deployments():
 
     try:
         deployments = store.list(environment=environment, service=service, limit=limit)
-    except STORAGE_EXCEPTIONS as exc:
+    except STORAGE_EXCEPTIONS:
         app.logger.exception("Failed to list deployments")
         return storage_error_response()
 
@@ -175,7 +175,7 @@ def list_deployments():
 def get_deployment(deployment_id):
     try:
         deployment = store.get(deployment_id)
-    except STORAGE_EXCEPTIONS as exc:
+    except STORAGE_EXCEPTIONS:
         app.logger.exception("Failed to get deployment")
         return storage_error_response()
 
@@ -207,7 +207,7 @@ def create_deployment():
 
     try:
         store.create(deployment)
-    except STORAGE_EXCEPTIONS as exc:
+    except STORAGE_EXCEPTIONS:
         app.logger.exception("Failed to create deployment")
         return storage_error_response()
 

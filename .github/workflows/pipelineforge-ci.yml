@@ -3,8 +3,14 @@ name: PipelineForge CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'pipelineforge/**'
+      - '.github/workflows/pipelineforge-ci.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'pipelineforge/**'
+      - '.github/workflows/pipelineforge-ci.yml'
 
 jobs:
   build:
@@ -18,19 +24,15 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r pipelineforge/app/requirements.txt
       - name: Lint
         run: |
           pip install flake8
-          flake8 pipelineforge/app/app.py
+          flake8 --max-line-length=100 pipelineforge/app/app.py
       - name: Run tests
         run: |
-          echo "No tests yet. Add tests to pipelineforge/app/tests/"
+          python -m unittest discover -s pipelineforge/app -p 'test_*.py'
       - name: Build Docker image
         run: |
           docker build -t pipelineforge-app:ci pipelineforge/app
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipelineforge-app-image
-          path: pipelineforge/app

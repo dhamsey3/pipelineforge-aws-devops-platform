@@ -2,31 +2,21 @@
 
 PipelineForge is an AWS-native deployment tracker API. It records deployment events by service and environment, stores them in DynamoDB, and runs as a Flask/Gunicorn container on ECS Fargate behind an Application Load Balancer.
 
-## Live App
+## AWS Status
 
-The `dev` environment is live in AWS `eu-central-1`.
-
-- App URL: `http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com`
-- Health check: `http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com/health`
-- Main stack: `pipelineforge-main-stack-dev`
-- App stack: `dev-pipelineforge-app-stack`
-- ECS service: `dev-pipelineforge-service`
-
-```bash
-curl http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com/health
-```
+The AWS `dev` environment has been cleaned up to avoid ongoing infrastructure cost. Redeploy with the commands below when you need the hosted API again.
 
 ## API
 
 ```bash
 # List deployment events
-curl http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com/deployments
+curl http://<app-url>/deployments
 
 # Filter deployment events
-curl "http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com/deployments?environment=dev&service=billing-api"
+curl "http://<app-url>/deployments?environment=dev&service=billing-api"
 
 # Create a deployment event
-curl -X POST http://dev-pipelineforge-alb-1620890950.eu-central-1.elb.amazonaws.com/deployments \
+curl -X POST http://<app-url>/deployments \
   -H "Content-Type: application/json" \
   -d '{"service":"billing-api","environment":"dev","version":"1.0.0","status":"succeeded","commit_sha":"abc1234","deployed_by":"platform-team"}'
 ```
@@ -60,6 +50,9 @@ Core endpoints:
 
 ```bash
 cd pipelineforge
+export AWS_PROFILE=pipelineforge-dev
+export AWS_REGION=eu-central-1
+bash scripts/aws-connect.sh dev
 set -a && source .aws-connection.env && set +a
 bash scripts/deploy.sh dev dhamsey3 pipelineforge-aws-devops-platform main
 ```
